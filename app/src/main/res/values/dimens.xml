@@ -1,0 +1,7 @@
+<resources>
+    <dimen name="fab_margin">16dp</dimen>
+    <dimen name="dirBtnWidth">80dp</dimen>
+
+    <dimen name="fBtnWidth">120dp</dimen>
+    <dimen name="fBtnHeight">54dp</dimen>
+</resources>
