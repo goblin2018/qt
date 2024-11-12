@@ -17,6 +17,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Binder;
+import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -98,8 +99,21 @@ public class BleService extends Service {
         if (!isScanning.getValue()) {
             isScanning.postValue(true);
             deviceList.postValue(new ArrayList<>());
-            if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
-                return;
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
+                    return;
+                }
+            } else {
+                if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                    return;
+                }
+            }
+            Log.d(TAG, "startScan: ");
+            if (bluetoothLeScanner == null) {
+                BluetoothManager bluetoothManager = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
+                BluetoothAdapter bluetoothAdapter = bluetoothManager.getAdapter();
+                bluetoothLeScanner = bluetoothAdapter.getBluetoothLeScanner();
             }
             bluetoothLeScanner.startScan(scanCallback);
             // 设置一个定时器来停止扫描
@@ -110,8 +124,14 @@ public class BleService extends Service {
     public void stopScan() {
         if (isScanning.getValue()) {
             isScanning.postValue(false);
-            if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
-                return;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
+                    return;
+                }
+            } else {
+                if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                    return;
+                }
             }
             bluetoothLeScanner.stopScan(scanCallback);
             if (callback != null) {
@@ -124,9 +144,15 @@ public class BleService extends Service {
         Log.d(TAG, "connectToDevice: " + bleStatus.getValue());
         if (!(bleStatus.getValue() == BluetoothProfile.STATE_CONNECTING)) {
             bleStatus.postValue(BluetoothProfile.STATE_CONNECTING);
-            if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                return;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                // Android 12 及以上版本才需要检查 BLUETOOTH_CONNECT 权限
+                if (ActivityCompat.checkSelfPermission(BleService.this,
+                        Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                    Log.d(TAG, "No BLUETOOTH_CONNECT permission");
+                    return;
+                }
             }
+
 
             Log.d(TAG, "connectToDevice: OK" + device);
             bluetoothGatt = device.connectGatt(this, false, gattCallback);
@@ -136,9 +162,15 @@ public class BleService extends Service {
 
     public void disconnect() {
         if (bluetoothGatt != null) {
-            if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                return;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                // Android 12 及以上版本才需要检查 BLUETOOTH_CONNECT 权限
+                if (ActivityCompat.checkSelfPermission(BleService.this,
+                        Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                    Log.d(TAG, "No BLUETOOTH_CONNECT permission");
+                    return;
+                }
             }
+
             bluetoothGatt.disconnect();
         }
     }
@@ -165,9 +197,16 @@ public class BleService extends Service {
         public void onScanResult(int callbackType, ScanResult result) {
             BluetoothDevice device = result.getDevice();
             if (device == null) return;
-            if (ActivityCompat.checkSelfPermission(BleService.this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                return;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                // Android 12 及以上版本才需要检查 BLUETOOTH_CONNECT 权限
+                if (ActivityCompat.checkSelfPermission(BleService.this,
+                        Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                    Log.d(TAG, "No BLUETOOTH_CONNECT permission");
+                    return;
+                }
             }
+
+
             Log.i("QTBLE", "onScanResult: " + device.getName() );
 
             List<BluetoothDevice> items = deviceList.getValue();
@@ -191,9 +230,15 @@ public class BleService extends Service {
                     callback.onConnected(connectedDevice.getValue());
                 }
 
-                if (ActivityCompat.checkSelfPermission(BleService.this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                    return;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    // Android 12 及以上版本才需要检查 BLUETOOTH_CONNECT 权限
+                    if (ActivityCompat.checkSelfPermission(BleService.this,
+                            Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                        Log.d(TAG, "No BLUETOOTH_CONNECT permission");
+                        return;
+                    }
                 }
+
                 gatt.discoverServices();
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 connectedDevice.postValue(null);
@@ -230,12 +275,28 @@ public class BleService extends Service {
             return;
         }
         BluetoothGattService customService = bluetoothGatt.getService(SERVICE_ID);
-        BluetoothGattCharacteristic serialCharacteristic = customService.getCharacteristic(CHARACTER_ID);
-        Log.d(TAG, "writeCharacteristic: **" + value + "**");
-        serialCharacteristic.setValue(value);
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+        if (customService == null) {
+            Log.w(TAG, "writeCharacteristic: servie not exist" );
             return;
         }
+
+
+        BluetoothGattCharacteristic serialCharacteristic = customService.getCharacteristic(CHARACTER_ID);
+        if (serialCharacteristic == null) {
+            Log.w(TAG, "writeCharacteristic: character not exists" );
+            return;
+        }
+        Log.d(TAG, "writeCharacteristic: **" + value + "**");
+        serialCharacteristic.setValue(value);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // Android 12 及以上版本才需要检查 BLUETOOTH_CONNECT 权限
+            if (ActivityCompat.checkSelfPermission(BleService.this,
+                    Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                Log.d(TAG, "No BLUETOOTH_CONNECT permission");
+                return;
+            }
+        }
+
         bluetoothGatt.writeCharacteristic(serialCharacteristic);
     }
 
@@ -245,9 +306,16 @@ public class BleService extends Service {
     public void onDestroy() {
         super.onDestroy();
         if (bluetoothGatt != null) {
-            if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                return;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                // Android 12 及以上版本才需要检查 BLUETOOTH_CONNECT 权限
+                if (ActivityCompat.checkSelfPermission(BleService.this,
+                        Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                    Log.d(TAG, "No BLUETOOTH_CONNECT permission");
+                    return;
+                }
             }
+
+
             bluetoothGatt.close();
             bluetoothGatt = null;
         }

@@ -1,10 +1,12 @@
 package com.example.qt;
 
+import android.Manifest;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.os.Build;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -76,9 +78,16 @@ public class DeviceListAdapter extends ArrayAdapter<BluetoothDevice> {
         ImageView statusIcon = convertView.findViewById(R.id.statusIcon);
 
         if (device != null) {
-            if (ActivityCompat.checkSelfPermission(context, android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-              return null;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                // Android 12 及以上版本才需要检查 BLUETOOTH_CONNECT 权限
+                if (ActivityCompat.checkSelfPermission(context,
+                        Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                    Log.d(TAG, "No BLUETOOTH_CONNECT permission");
+                    return null;
+                }
             }
+
+
             deviceName.setText(device.getName() != null ? device.getName() : device.getAddress());
 
             if (isSameDevice(connectedDevice, device)) {
@@ -101,7 +110,7 @@ public class DeviceListAdapter extends ArrayAdapter<BluetoothDevice> {
             return false;
         }
 
-        return  a.getAddress() == b.getAddress();
+        return a.getAddress().equals(b.getAddress());
     }
 
 

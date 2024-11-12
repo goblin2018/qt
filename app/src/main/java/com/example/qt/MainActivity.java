@@ -174,9 +174,15 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 toolbarBinding.tvDeviceName.setText("未连接");
                 updateConnectionStatus(false);
             } else {
-                if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-                    return;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    // Android 12 及以上版本才需要检查 BLUETOOTH_CONNECT 权限
+                    if (ActivityCompat.checkSelfPermission(MainActivity.this,
+                            Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                        Log.d(TAG, "No BLUETOOTH_CONNECT permission");
+                        return;
+                    }
                 }
+
                 updateConnectionStatus(true);
                 toolbarBinding.tvDeviceName.setText(device.getName());
             }
@@ -205,7 +211,11 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             @Override
             public void onClick(View v) {
                 // 处理蓝牙按钮点击
-                showBluetoothDialog();
+                if (permissionsGranted && bluetoothAdapter.isEnabled()) {
+                    showBluetoothDialog();
+                } else {
+                    checkPermissionsAndEnableBluetooth();
+                }
             }
         });
 
@@ -219,12 +229,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             return;
         }
 
-        BluetoothLeScanner bluetoothLeScanner = bluetoothAdapter.getBluetoothLeScanner();
-        if (bluetoothLeScanner == null) {
-            Toast.makeText(this, "设备不支持蓝牙", Toast.LENGTH_SHORT).show();
-//            finish();
-            return;
-        }
 
         deviceListAdapter = new DeviceListAdapter(this);
 
@@ -322,6 +326,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
 
     private void checkPermissionsAndEnableBluetooth() {
+
         String[] permissions;
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -343,9 +348,27 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
         if (allPermissionsGranted) {
             permissionsGranted = true;
-            enableBluetooth();
+//            enableBluetooth();
         } else {
             ActivityCompat.requestPermissions(this, permissions, REQUEST_PERMISSIONS);
+            return;
+        }
+
+
+
+        // 2. 检查蓝牙是否开启
+        if (!bluetoothAdapter.isEnabled()) {
+            Toast.makeText(this, "请开启蓝牙", Toast.LENGTH_SHORT).show();
+            Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+            startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
+            return;
+        }
+
+        BluetoothLeScanner bluetoothLeScanner = bluetoothAdapter.getBluetoothLeScanner();
+        if (bluetoothLeScanner == null) {
+            Toast.makeText(this, "设备不支持BLE蓝牙", Toast.LENGTH_SHORT).show();
+//            finish();
+            return;
         }
 
     }
@@ -442,21 +465,21 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     }
 
 
-    @SuppressLint("MissingPermission")
-    private void enableBluetooth() {
-
-        if (!permissionsGranted) {
-            checkPermissionsAndEnableBluetooth();
-            return;
-        }
-        if (!bluetoothAdapter.isEnabled()) {
-            Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
-            startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
-        } else {
-            Toast.makeText(this, "已打开蓝牙", Toast.LENGTH_SHORT).show();
-//            startDiscovery();
-        }
-    }
+//    @SuppressLint("MissingPermission")
+//    private void enableBluetooth() {
+//
+//        if (!permissionsGranted) {
+//            checkPermissionsAndEnableBluetooth();
+//            return;
+//        }
+//        if (!bluetoothAdapter.isEnabled()) {
+//            Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+//            startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
+//        } else {
+//            Toast.makeText(this, "已打开蓝牙", Toast.LENGTH_SHORT).show();
+////            startDiscovery();
+//        }
+//    }
 
 
     public void updateConnectionStatus(boolean connected) {
@@ -550,7 +573,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     @Override
     public void onDisconnected() {
         runOnUiThread(() -> {
-            Toast.makeText(this, "连接断开", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "连接失败", Toast.LENGTH_SHORT).show();
         });
     }
 
